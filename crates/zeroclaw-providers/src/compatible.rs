@@ -1595,6 +1595,32 @@ impl OpenAiCompatibleProvider {
                     };
                 }
 
+                // Assistant message with reasoning_content but no tool_calls
+                // (e.g. final response from a thinking model).
+                if message.role == "assistant"
+                    && let Ok(value) = serde_json::from_str::<serde_json::Value>(&message.content)
+                    && value.get("reasoning_content").is_some()
+                    && value.get("tool_calls").is_none()
+                {
+                    let content = value
+                        .get("content")
+                        .and_then(serde_json::Value::as_str)
+                        .map(|v| MessageContent::Text(v.to_string()));
+
+                    let reasoning_content = value
+                        .get("reasoning_content")
+                        .and_then(serde_json::Value::as_str)
+                        .map(ToString::to_string);
+
+                    return NativeMessage {
+                        role: "assistant".to_string(),
+                        content,
+                        tool_call_id: None,
+                        tool_calls: None,
+                        reasoning_content,
+                    };
+                }
+
                 if message.role == "tool"
                     && let Ok(value) = serde_json::from_str::<serde_json::Value>(&message.content)
                 {

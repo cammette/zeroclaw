@@ -1530,6 +1530,14 @@ pub fn build_native_assistant_history_from_parsed_calls(
         serde_json::Value::String(text.trim().to_string())
     };
 
+    // When there are no tool calls, omit the field entirely.
+    // Providers like DeepSeek reject empty tool_calls arrays.
+    if calls_json.is_empty() {
+        return reasoning_content.map(|rc| {
+            serde_json::json!({"content": content, "reasoning_content": rc}).to_string()
+        });
+    }
+
     let mut obj = serde_json::json!({
         "content": content,
         "tool_calls": calls_json,
@@ -2827,7 +2835,7 @@ Let me check the result."#;
     #[test]
     fn extract_json_values_handles_whitespace_only() {
         let result = extract_json_values(
-            "   
+            "
 	  ",
         );
         assert!(result.is_empty());

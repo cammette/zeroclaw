@@ -229,8 +229,12 @@ impl ToolDispatcher for NativeToolDispatcher {
                 } => {
                     let mut payload = serde_json::json!({
                         "content": text,
-                        "tool_calls": tool_calls,
                     });
+                    // Only include tool_calls when non-empty — providers like
+                    // DeepSeek reject empty arrays.
+                    if !tool_calls.is_empty() {
+                        payload["tool_calls"] = serde_json::json!(tool_calls);
+                    }
                     if let Some(rc) = reasoning_content {
                         payload["reasoning_content"] = serde_json::json!(rc);
                     }

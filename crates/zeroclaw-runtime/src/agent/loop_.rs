@@ -482,6 +482,16 @@ fn build_native_assistant_history(
         serde_json::Value::String(text.trim().to_string())
     };
 
+    // Omit tool_calls when empty to avoid provider rejections (DeepSeek).
+    if calls_json.is_empty() {
+        return match reasoning_content {
+            Some(rc) => {
+                serde_json::json!({"content": content, "reasoning_content": rc}).to_string()
+            }
+            None => serde_json::json!({"content": content}).to_string(),
+        };
+    }
+
     let mut obj = serde_json::json!({
         "content": content,
         "tool_calls": calls_json,
@@ -1253,6 +1263,7 @@ pub async fn run_tool_call_loop(
             native_tool_calls,
             _parse_issue_detected,
             response_streamed_live,
+            reasoning_content,
         ) = match chat_result {
             Ok(resp) => {
                 let (resp_input_tokens, resp_output_tokens) = resp
@@ -1385,6 +1396,7 @@ pub async fn run_tool_call_loop(
                     native_calls,
                     parse_issue.is_some(),
                     streamed_live_deltas,
+                    reasoning_content,
                 )
             }
             Err(e) => {
@@ -1506,6 +1518,18 @@ pub async fn run_tool_call_loop(
                 if !chunk.is_empty() {
                     let _ = tx.send(StreamDelta::Text(chunk)).await;
                 }
+            }
+
+            // Preserve reasoning_content for thinking models (e.g. DeepSeek).
+            // The model requires assistant messages to include reasoning_content
+            // when sent back in subsequent requests.
+            if let Some(rc) = &reasoning_content
+                && use_native_tools
+                && let Some(json) =
+                    build_native_assistant_history_from_parsed_calls(&response_text, &[], Some(rc))
+            {
+                history.push(ChatMessage::assistant(json));
+                return Ok(accumulated_display_text);
             }
 
             history.push(ChatMessage::assistant(response_text.clone()));
